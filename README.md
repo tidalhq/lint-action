@@ -462,15 +462,9 @@ With `auto_fix` set to `true`, by default the action will try and fix code issue
 
 - **`neutral_check_on_warning`:** Whether the check run should conclude with a neutral status instead of success when the linter finds only warnings. Default: `false`
 
-- **`check_suite_mode`:** Check suite attachment mode. Use `auto` to resolve and attach to a suite, or `none` to always create checks without `check_suite_id`. Default: `"auto"`
+- **`check_suite_job_check_run_id`:** Check run ID for the current job (use `${{ job.check_run_id }}`) to attach checks to the workflow suite. Required.
 
-- **`check_suite_job_name`:** Optional workflow job name hint used to deterministically resolve the suite from the current workflow run (example: `"Run linters"`). Default: `""`
-
-- **`check_suite_resolution_retries`:** Number of attempts to resolve the check suite before falling back. Default: `"6"`
-
-- **`check_suite_resolution_delay_ms`:** Delay in milliseconds between resolution retries. Default: `"1500"`
-
-- **`check_suite_debug`:** Emit detailed check-suite resolution logs (helpful for debugging workflow/suite mismatches). Default: `false`
+- **`check_suite_debug`:** Emit detailed check-suite resolution logs (helpful for debugging workflow/suite lookups). Default: `false`
 
 ### Linter support
 

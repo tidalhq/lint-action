@@ -6714,68 +6714,7 @@ async function createCheck(
 }
 
 /**
- * @param {string} runId - GitHub Actions run ID
- * @param {Array<object> | undefined} checkRuns - Check runs returned by GitHub API
- * @returns {boolean} - Whether any check run belongs to the workflow run
- */
-function hasCheckRunForWorkflowRun(runId, checkRuns) {
-	if (!Array.isArray(checkRuns)) {
-		return false;
-	}
-
-	return checkRuns.some((checkRun) => {
-		const appSlug = checkRun && checkRun.app ? checkRun.app.slug : "";
-		const detailsUrl = (checkRun && (checkRun.details_url || checkRun.html_url)) || "";
-		return (
-			appSlug === "github-actions" &&
-			typeof detailsUrl === "string" &&
-			detailsUrl.includes(`/actions/runs/${runId}/`)
-		);
-	});
-}
-
-/**
- * @param {string} runId - GitHub Actions run ID
- * @param {Array<object> | undefined} checkRuns - Check runs returned by GitHub API
- * @returns {number | null} - Matching check suite ID if found
- */
-function getSuiteIdForWorkflowRun(runId, checkRuns) {
-	if (!Array.isArray(checkRuns)) {
-		return null;
-	}
-
-	const matchingRun = checkRuns.find((checkRun) => {
-		const appSlug = checkRun && checkRun.app ? checkRun.app.slug : "";
-		const checkSuiteId =
-			checkRun && checkRun.check_suite && typeof checkRun.check_suite.id === "number"
-				? checkRun.check_suite.id
-				: null;
-		const detailsUrl = (checkRun && (checkRun.details_url || checkRun.html_url)) || "";
-		return (
-			appSlug === "github-actions" &&
-			typeof detailsUrl === "string" &&
-			detailsUrl.includes(`/actions/runs/${runId}/`) &&
-			checkSuiteId !== null
-		);
-	});
-
-	return matchingRun ? matchingRun.check_suite.id : null;
-}
-
-/**
- * @param {number} ms - Delay duration in milliseconds
- * @returns {Promise<void>}
- */
-async function sleep(ms) {
-	if (ms <= 0) {
-		return;
-	}
-	await new Promise((resolve) => {
-		setTimeout(resolve, ms);
-	});
-}
-
-/**
+ * Emits structured check suite diagnostics when debug logging is enabled.
  * @param {boolean} debug - Whether to emit debug logs
  * @param {object} payload - Structured debug payload
  * @returns {void}
@@ -6788,6 +6727,7 @@ function logSuiteDebug(debug, payload) {
 }
 
 /**
+ * Builds common authenticated GitHub API headers.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @returns {object} - Authenticated request headers
  */
@@ -6800,6 +6740,7 @@ function getApiHeaders(context) {
 }
 
 /**
+ * Performs an authenticated GET request to a repository-scoped GitHub API path.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @param {string} path - Relative API path
  * @returns {Promise<object>} - API response body
@@ -6812,282 +6753,63 @@ async function getApi(context, path) {
 }
 
 /**
- * @param {GithubContext} context - Information about the GitHub repository and action trigger event
- * @param {string} checkRunUrl - Full API URL to a check run
- * @returns {Promise<object>} - Check run response body
- */
-async function getCheckRunByUrl(context, checkRunUrl) {
-	return request(checkRunUrl, {
-		method: "GET",
-		headers: getApiHeaders(context),
-	});
-}
-
-/**
- * @param {GithubContext} context - Information about the GitHub repository and action trigger event
- * @param {string} runId - Workflow run ID
- * @param {string} jobNameHint - Workflow job name hint
- * @param {boolean} debug - Whether to emit debug logs
- * @returns {Promise<number | null>} - Matching check suite ID if found
- */
-async function getSuiteIdForJobNameHint(context, runId, jobNameHint, debug) {
-	if (!jobNameHint) {
-		return null;
-	}
-
-	const workflowJobsResponse = await getApi(context, `actions/runs/${runId}/jobs?per_page=100`);
-	const jobs = Array.isArray(workflowJobsResponse.data.jobs) ? workflowJobsResponse.data.jobs : [];
-	logSuiteDebug(debug, {
-		event: "jobs-fetched",
-		runId,
-		jobNameHint,
-		jobCount: jobs.length,
-	});
-
-	const matchingJob = jobs.find((job) => job && job.name === jobNameHint);
-	if (!matchingJob) {
-		logSuiteDebug(debug, {
-			event: "job-not-found",
-			runId,
-			jobNameHint,
-			availableJobNames: jobs.map((job) => (job && typeof job.name === "string" ? job.name : "")),
-		});
-		return null;
-	}
-
-	if (!matchingJob.check_run_url) {
-		logSuiteDebug(debug, {
-			event: "job-missing-check-run-url",
-			runId,
-			jobNameHint,
-			jobId: matchingJob.id || null,
-		});
-		return null;
-	}
-
-	const checkRunResponse = await getCheckRunByUrl(context, matchingJob.check_run_url);
-	const jobSuiteId =
-		checkRunResponse &&
-		checkRunResponse.data &&
-		checkRunResponse.data.check_suite &&
-		typeof checkRunResponse.data.check_suite.id === "number"
-			? checkRunResponse.data.check_suite.id
-			: null;
-
-	logSuiteDebug(debug, {
-		event: "job-check-run-fetched",
-		runId,
-		jobNameHint,
-		jobSuiteId,
-	});
-
-	return jobSuiteId;
-}
-
-/**
  * Resolves the check suite ID of the current GitHub Actions workflow run
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @param {object} [options] - Check suite resolution options
- * @param {string | null} [options.headSha] - SHA of the commit being linted
- * @param {string} [options.mode] - Check suite mode ("auto" or "none")
- * @param {string} [options.jobNameHint] - Job name hint for deterministic suite lookup
+ * @param {number | null} [options.jobCheckRunId] - Check run ID for the current job
  * @param {boolean} [options.debug] - Whether to emit detailed check suite logs
- * @param {number} [options.retries] - Number of resolution attempts
- * @param {number} [options.delayMs] - Delay in milliseconds between retries
  * @returns {Promise<number | null>} - Check suite ID if available
  */
 async function getCurrentRunCheckSuiteId(context, options = {}) {
-	const {
-		headSha = null,
-		mode = "auto",
-		jobNameHint = "",
-		debug = false,
-		retries = 6,
-		delayMs = 1500,
-	} = options;
-	const runId = process.env.GITHUB_RUN_ID;
-	const runAttempt = process.env.GITHUB_RUN_ATTEMPT || "";
-	const normalizedMode = (mode || "auto").toLowerCase();
-	const attempts = Number.isInteger(retries) ? Math.max(retries, 1) : 1;
-	const waitDelay = Number.isInteger(delayMs) ? Math.max(delayMs, 0) : 0;
+	const { jobCheckRunId = null, debug = false } = options;
 
-	if (normalizedMode === "none") {
+	if (!Number.isInteger(jobCheckRunId) || jobCheckRunId <= 0) {
 		logSuiteDebug(debug, {
-			event: "suite-resolution-disabled",
-			mode: normalizedMode,
-		});
-		return null;
-	}
-
-	if (!runId) {
-		core.warning("GITHUB_RUN_ID is missing. Creating check runs without check_suite_id.");
-		logSuiteDebug(debug, {
-			event: "missing-run-id",
-			runAttempt,
-			headSha,
-			jobNameHint,
+			event: "suite-resolution-skipped",
+			reason: "missing-job-check-run-id",
 		});
 		return null;
 	}
 
 	logSuiteDebug(debug, {
 		event: "suite-resolution-start",
-		runId,
-		runAttempt,
-		headSha,
-		jobNameHint,
-		mode: normalizedMode,
-		retries: attempts,
-		delayMs: waitDelay,
+		jobCheckRunId,
 	});
 
-	let runCandidateSuiteId = null;
-	for (let attempt = 1; attempt <= attempts; attempt += 1) {
+	try {
+		const checkRunResponse = await getApi(context, `check-runs/${jobCheckRunId}`);
+		const checkSuiteId =
+			checkRunResponse &&
+			checkRunResponse.data &&
+			checkRunResponse.data.check_suite &&
+			typeof checkRunResponse.data.check_suite.id === "number"
+				? checkRunResponse.data.check_suite.id
+				: null;
+
 		logSuiteDebug(debug, {
-			event: "suite-resolution-attempt",
-			runId,
-			attempt,
-			totalAttempts: attempts,
+			event: "suite-resolution-result",
+			jobCheckRunId,
+			checkSuiteId,
 		});
 
-		if (jobNameHint) {
-			try {
-				const hintedSuiteId = await getSuiteIdForJobNameHint(context, runId, jobNameHint, debug);
-				if (hintedSuiteId !== null) {
-					core.info(
-						`Resolved check suite ${hintedSuiteId} for workflow run ${runId} using job hint "${jobNameHint}".`,
-					);
-					logSuiteDebug(debug, {
-						event: "suite-resolution-success",
-						runId,
-						attempt,
-						resolvedVia: "job-hint",
-						checkSuiteId: hintedSuiteId,
-					});
-					return hintedSuiteId;
-				}
-			} catch (jobHintError) {
-				logSuiteDebug(debug, {
-					event: "job-hint-lookup-failed",
-					runId,
-					attempt,
-					errorMessage: jobHintError.message,
-				});
-			}
+		if (checkSuiteId === null) {
+			core.warning(
+				"Could not resolve check suite from job.check_run_id; creating check runs without check_suite_id.",
+			);
 		}
 
-		try {
-			const workflowRunResponse = await getApi(context, `actions/runs/${runId}`);
-			let checkSuiteId = null;
-			if (
-				workflowRunResponse &&
-				workflowRunResponse.data &&
-				typeof workflowRunResponse.data.check_suite_id === "number"
-			) {
-				checkSuiteId = workflowRunResponse.data.check_suite_id;
-			}
-			if (checkSuiteId !== null) {
-				runCandidateSuiteId = checkSuiteId;
-			}
-			logSuiteDebug(debug, {
-				event: "workflow-run-fetched",
-				runId,
-				attempt,
-				checkSuiteId,
-			});
-
-			if (checkSuiteId !== null) {
-				const suiteChecksResponse = await getApi(context, `check-suites/${checkSuiteId}/check-runs`);
-				const suiteCheckRuns = suiteChecksResponse.data.check_runs;
-				const hasRunMatch = hasCheckRunForWorkflowRun(runId, suiteCheckRuns);
-				if (hasRunMatch) {
-					core.info(`Using check suite ${checkSuiteId} for workflow run ${runId}.`);
-					logSuiteDebug(debug, {
-						event: "suite-resolution-success",
-						runId,
-						attempt,
-						resolvedVia: "run",
-						checkSuiteId,
-					});
-					return checkSuiteId;
-				}
-				core.info(
-					`Check suite ${checkSuiteId} does not match workflow run ${runId}. Attempting fallback lookup.`,
-				);
-				logSuiteDebug(debug, {
-					event: "suite-verification-mismatch",
-					runId,
-					attempt,
-					checkSuiteId,
-				});
-			}
-		} catch (runError) {
-			logSuiteDebug(debug, {
-				event: "workflow-run-lookup-failed",
-				runId,
-				attempt,
-				errorMessage: runError.message,
-			});
-		}
-
-		if (headSha) {
-			try {
-				const commitChecksResponse = await getApi(context, `commits/${headSha}/check-runs`);
-				const fallbackSuiteId = getSuiteIdForWorkflowRun(runId, commitChecksResponse.data.check_runs);
-				if (fallbackSuiteId !== null) {
-					core.info(`Resolved check suite ${fallbackSuiteId} from commit check-runs fallback.`);
-					logSuiteDebug(debug, {
-						event: "suite-resolution-success",
-						runId,
-						attempt,
-						resolvedVia: "commit-fallback",
-						checkSuiteId: fallbackSuiteId,
-					});
-					return fallbackSuiteId;
-				}
-			} catch (fallbackError) {
-				logSuiteDebug(debug, {
-					event: "commit-fallback-failed",
-					runId,
-					attempt,
-					headSha,
-					errorMessage: fallbackError.message,
-				});
-			}
-		}
-
-		if (attempt < attempts) {
-			logSuiteDebug(debug, {
-				event: "suite-resolution-retrying",
-				runId,
-				nextAttempt: attempt + 1,
-				delayMs: waitDelay,
-			});
-			// Give the checks API time to expose newly-created workflow job metadata.
-			await sleep(waitDelay);
-		}
-	}
-
-	if (runCandidateSuiteId !== null) {
+		return checkSuiteId;
+	} catch (err) {
+		logSuiteDebug(debug, {
+			event: "suite-resolution-error",
+			jobCheckRunId,
+			errorMessage: err.message,
+		});
 		core.warning(
-			`Could not verify check suite for workflow run ${runId}; using run candidate suite ${runCandidateSuiteId} as fallback.`,
+			"Could not resolve check suite from job.check_run_id; creating check runs without check_suite_id.",
 		);
-		logSuiteDebug(debug, {
-			event: "suite-resolution-fallback-candidate",
-			runId,
-			checkSuiteId: runCandidateSuiteId,
-		});
-		return runCandidateSuiteId;
+		return null;
 	}
-
-	core.warning(
-		`Could not resolve check suite for workflow run ${runId}. Falling back to creating check runs without check_suite_id.`,
-	);
-	logSuiteDebug(debug, {
-		event: "suite-resolution-failed",
-		runId,
-	});
-	return null;
 }
 
 module.exports = { createCheck, getCurrentRunCheckSuiteId };
@@ -11327,7 +11049,7 @@ exports.quoteAll = quoteAll;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"lint-action","version":"2.3.2","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
+module.exports = JSON.parse('{"name":"lint-action","version":"2.3.3","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
 
 /***/ })
 
@@ -11397,23 +11119,14 @@ async function runAction() {
 	const commitMessage = core.getInput("commit_message", { required: true });
 	const checkName = core.getInput("check_name", { required: true });
 	const neutralCheckOnWarning = core.getInput("neutral_check_on_warning") === "true";
-	const checkSuiteMode = (core.getInput("check_suite_mode") || "auto").trim().toLowerCase();
-	const checkSuiteJobName = core.getInput("check_suite_job_name");
+	const checkSuiteJobCheckRunIdInput = Number.parseInt(
+		core.getInput("check_suite_job_check_run_id", { required: true }),
+		10,
+	);
 	const checkSuiteDebug = core.getInput("check_suite_debug") === "true";
-	const checkSuiteResolutionRetriesInput = Number.parseInt(
-		core.getInput("check_suite_resolution_retries"),
-		10,
-	);
-	const checkSuiteResolutionDelayMsInput = Number.parseInt(
-		core.getInput("check_suite_resolution_delay_ms"),
-		10,
-	);
-	const checkSuiteResolutionRetries = Number.isInteger(checkSuiteResolutionRetriesInput)
-		? Math.max(checkSuiteResolutionRetriesInput, 1)
-		: 6;
-	const checkSuiteResolutionDelayMs = Number.isInteger(checkSuiteResolutionDelayMsInput)
-		? Math.max(checkSuiteResolutionDelayMsInput, 0)
-		: 1500;
+	const checkSuiteJobCheckRunId = Number.isInteger(checkSuiteJobCheckRunIdInput)
+		? checkSuiteJobCheckRunIdInput
+		: null;
 	const isPullRequest =
 		context.eventName === "pull_request" || context.eventName === "pull_request_target";
 
@@ -11533,12 +11246,8 @@ async function runAction() {
 	let groupClosed = false;
 	try {
 		const checkSuiteId = await getCurrentRunCheckSuiteId(context, {
-			headSha,
-			mode: checkSuiteMode,
-			jobNameHint: checkSuiteJobName,
+			jobCheckRunId: checkSuiteJobCheckRunId,
 			debug: checkSuiteDebug,
-			retries: checkSuiteResolutionRetries,
-			delayMs: checkSuiteResolutionDelayMs,
 		});
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>

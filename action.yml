@@ -43,22 +43,9 @@ inputs:
     description: Whether the check run should conclude with a neutral status instead of success when the linter finds only warnings
     required: false
     default: "false"
-  check_suite_mode:
-    description: Whether to attach created checks to a resolved check suite (`auto` or `none`)
-    required: false
-    default: "auto"
-  check_suite_job_name:
-    description: Optional workflow job name hint used to deterministically resolve the check suite
-    required: false
-    default: ""
-  check_suite_resolution_retries:
-    description: Number of attempts when resolving the check suite
-    required: false
-    default: "6"
-  check_suite_resolution_delay_ms:
-    description: Delay in milliseconds between check suite resolution retries
-    required: false
-    default: "1500"
+  check_suite_job_check_run_id:
+    description: Check run ID for the current job (use `${{ job.check_run_id }}`) to attach checks to the workflow suite
+    required: true
   check_suite_debug:
     description: Emit detailed check suite resolution logs
     required: false

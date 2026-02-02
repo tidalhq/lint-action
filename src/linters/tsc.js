@@ -16,21 +16,26 @@ class TSC {
 		return "TypeScript";
 	}
 
+	static get command() {
+		return "tsc";
+	}
+
 	/**
 	 * Verifies that all required programs are installed. Throws an error if programs are missing
 	 * @param {string} dir - Directory to run the linting program in
 	 * @param {string} prefix - Prefix to the lint command
+	 * @param {string} command - Command to run for TypeScript checks
 	 */
-	static async verifySetup(dir, prefix = "") {
-		// Verify that NPM is installed (required to execute ESLint)
+	static async verifySetup(dir, prefix = "", command = this.command) {
+		// Verify that NPM is installed (required to execute TypeScript checks)
 		if (!(await commandExists("npm"))) {
 			throw new Error("NPM is not installed");
 		}
 
-		// Verify that ESLint is installed
+		// Verify that the configured TypeScript command is installed
 		const commandPrefix = prefix || getNpmBinCommand(dir);
 		try {
-			run(`${commandPrefix} tsc -v`, { dir });
+			run(`${commandPrefix} ${command} -v`, { dir });
 		} catch (err) {
 			throw new Error(`${this.name} is not installed`);
 		}
@@ -43,15 +48,16 @@ class TSC {
 	 * @param {string} args - Additional arguments to pass to the linter
 	 * @param {boolean} fix - Whether the linter should attempt to fix code style issues automatically
 	 * @param {string} prefix - Prefix to the lint command
+	 * @param {string} command - Command to run for TypeScript checks
 	 * @returns {{status: number, stdout: string, stderr: string}} - Output of the lint command
 	 */
-	static lint(dir, extensions, args = "", fix = false, prefix = "") {
+	static lint(dir, extensions, args = "", fix = false, prefix = "", command = this.command) {
 		if (fix) {
 			core.warning(`${this.name} does not support auto-fixing`);
 		}
 
 		const commandPrefix = prefix || getNpmBinCommand(dir);
-		return run(`${commandPrefix} tsc --noEmit --pretty false ${args}`, {
+		return run(`${commandPrefix} ${command} --noEmit --pretty false ${args}`, {
 			dir,
 			ignoreErrors: true,
 		});

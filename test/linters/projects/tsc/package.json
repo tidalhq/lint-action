@@ -3,6 +3,7 @@
 	"main": "index.js",
 	"private": true,
 	"devDependencies": {
+		"@typescript/native-preview": "latest",
 		"typescript": "^4.9.4"
 	}
 }

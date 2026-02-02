@@ -25,6 +25,7 @@ const swiftFormatLockwood = require("./params/swift-format-lockwood");
 // const swiftFormatOfficial = require("./params/swift-format-official");
 const swiftlintParams = require("./params/swiftlint");
 const tscParams = require("./params/tsc");
+const tsgoParams = require("./params/tsgo");
 const xoParams = require("./params/xo");
 
 const linterParams = [
@@ -47,6 +48,7 @@ const linterParams = [
 	rustfmtParams,
 	stylelintParams,
 	tscParams,
+	tsgoParams,
 	xoParams,
 ];
 if (process.platform === "linux") {
@@ -73,10 +75,21 @@ afterAll(async () => {
 // Test all linters
 describe.each(linterParams)(
 	"%s",
-	(projectName, linter, commandPrefix, extensions, args, getLintParams, getFixParams) => {
+	(
+		projectName,
+		linter,
+		commandPrefix,
+		extensions,
+		args,
+		getLintParams,
+		getFixParams,
+		command,
+	) => {
 		const projectTmpDir = join(tmpDir, projectName);
 		beforeAll(async () => {
-			await expect(linter.verifySetup(projectTmpDir, commandPrefix)).resolves.toEqual(undefined);
+			await expect(linter.verifySetup(projectTmpDir, commandPrefix, command)).resolves.toEqual(
+				undefined,
+			);
 		});
 
 		// Test lint and auto-fix modes
@@ -88,7 +101,14 @@ describe.each(linterParams)(
 
 			// Test `lint` function
 			test(`${linter.name} returns expected ${lintMode} output`, () => {
-				const cmdOutput = linter.lint(projectTmpDir, extensions, args, autoFix, commandPrefix);
+				const cmdOutput = linter.lint(
+					projectTmpDir,
+					extensions,
+					args,
+					autoFix,
+					commandPrefix,
+					command,
+				);
 
 				// Exit code
 				expect(cmdOutput.status).toEqual(expected.cmdOutput.status);

@@ -215,6 +215,10 @@ inputs:
     description: Shell command to prepend to the linter command. Will default to `npx --no-install` for NPM and `yarn run --silent` for Yarn.
     required: false
     default: ""
+  tsc_command:
+    description: Command to run for TypeScript checks. Use `tsc` by default, or `tsgo tsc` to run TypeScript Go.
+    required: false
+    default: "tsc"
   tsc_auto_fix:
     description: Whether this linter should try to fix code style issues automatically. If set to `true`, it will only work if "auto_fix" is set to `true` as well
     required: false

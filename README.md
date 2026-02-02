@@ -58,6 +58,7 @@ _**Note:** The behavior of actions like this one is currently limited in the con
   - [SwiftLint](https://github.com/realm/SwiftLint)
 - **TypeScript:**
   - [tsc](https://www.typescriptlang.org/docs/handbook/compiler-options.html)
+  - [tsgo](https://github.com/microsoft/typescript-go) (via `tsc_command`)
 - **VB.NET:**
   - [dotnet-format](https://github.com/dotnet/format)
 
@@ -146,6 +147,43 @@ jobs:
         with:
           eslint: true
           prettier: true
+```
+
+### TypeScript example (tsgo)
+
+```yml
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  run-linters:
+    name: Run linters
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Run linters
+        uses: wearerequired/lint-action@v2
+        with:
+          tsc: true
+          tsc_command: "tsgo tsc"
 ```
 
 **Important:** Make sure to exclude the `.github` directory in your ESLint and Prettier configs as the default `GITHUB_TOKEN` **cannot** be used to update workflow files due to the missing `workflow` permission. See [Limitations](#limitations).
@@ -386,14 +424,17 @@ With `auto_fix` set to `true`, by default the action will try and fix code issue
 
 ### Linter-specific options
 
-`[linter]` can be one of `autopep8`, `black`, `clang_format`, `dotnet_format`, `erblint`, `eslint`, `flake8`, `gofmt`, `golint`, `mypy`, `oitnb`, `php_codesniffer`, `prettier`, `pylint`, `rubocop`, `stylelint`, `swift_format_official`, `swift_format_lockwood`, `swiftlint` and `xo`:
+`[linter]` can be one of `autopep8`, `black`, `clang_format`, `dotnet_format`, `erblint`, `eslint`, `flake8`, `gofmt`, `golint`, `mypy`, `oitnb`, `php_codesniffer`, `prettier`, `pylint`, `rubocop`, `stylelint`, `swift_format_official`, `swift_format_lockwood`, `swiftlint`, `tsc` and `xo`:
 
 - **`[linter]`:** Enables the linter in your repository. Default: `false`
 - **`[linter]_args`**: Additional arguments to pass to the linter. Example: `eslint_args: "--max-warnings 0"` if ESLint checks should fail even if there are no errors and only warnings. Default: `""`
 - **`[linter]_dir`**: Directory where the linting command should be run. Example: `eslint_dir: server/` if ESLint is installed in the `server` subdirectory. Default: Repository root
 - **`[linter]_extensions`:** Extensions of files to check with the linter. Example: `eslint_extensions: js,ts` to lint JavaScript and TypeScript files with ESLint. Default: Varies by linter, see [`action.yml`](./action.yml)
 - **`[linter]_command_prefix`:** Command prefix to be run before the linter command. Default: `""`.
+- **`[linter]_command`:** Command to run for the linter. Currently supported for `tsc` (`tsc_command`), e.g. `tsc_command: "tsgo tsc"`. Default: `tsc`.
 - **`[linter]_auto_fix`:** Whether the linter should try to fix code style issues automatically. This option is useful to commit and push changes only for specific linters and not all of them when `auto_fix` option is set. Default: `true` if linter supports auto-fixing, `false` if not.
+
+`tsc_command` is executed via the same local-project resolution as other Node.js linters (defaults to `yarn run --silent` or `npx --no-install` in `tsc_dir`). If you want to run a global command, set `tsc_command_prefix` explicitly.
 
 ### General options
 

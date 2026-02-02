@@ -11,7 +11,10 @@ const {
 	TOKEN,
 	USERNAME,
 } = require("./test-constants");
+const commitCheckRunsFallbackResponse = require("./api-responses/commit-check-runs-fallback.json");
 const checkRunsResponse = require("./api-responses/check-runs.json");
+const suiteCheckRunsMatchResponse = require("./api-responses/suite-check-runs-match.json");
+const suiteCheckRunsMismatchResponse = require("./api-responses/suite-check-runs-mismatch.json");
 
 jest.mock("../../src/utils/request", () => jest.fn());
 
@@ -70,6 +73,7 @@ describe("createCheck()", () => {
 });
 
 describe("getCurrentRunCheckSuiteId()", () => {
+	const HEAD_SHA = "abc123";
 	const context = {
 		actor: USERNAME,
 		event: {},
@@ -96,27 +100,67 @@ describe("getCurrentRunCheckSuiteId()", () => {
 		expect(request).not.toHaveBeenCalled();
 	});
 
-	test("returns suite id from GitHub Actions run API response", async () => {
+	test("returns suite id when candidate suite matches the current workflow run", async () => {
 		process.env.GITHUB_RUN_ID = "123";
-		request.mockResolvedValue({
+		request.mockResolvedValueOnce({
 			data: {
 				check_suite_id: 987,
 			},
 		});
+		request.mockResolvedValueOnce({
+			data: suiteCheckRunsMatchResponse,
+		});
 
-		const result = await getCurrentRunCheckSuiteId(context);
+		const result = await getCurrentRunCheckSuiteId(context, HEAD_SHA);
 		expect(result).toBe(987);
-		expect(request).toHaveBeenCalledTimes(1);
+		expect(request).toHaveBeenCalledTimes(2);
 		expect(request.mock.calls[0][0]).toBe(
 			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/actions/runs/123`,
 		);
+		expect(request.mock.calls[1][0]).toBe(
+			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-suites/987/check-runs`,
+		);
 	});
 
-	test("logs warning and returns null when suite lookup fails", async () => {
+	test("falls back to commit check runs when candidate suite does not match workflow run", async () => {
 		process.env.GITHUB_RUN_ID = "123";
-		request.mockRejectedValue(new Error("Request failed"));
+		request.mockResolvedValueOnce({
+			data: {
+				check_suite_id: 987,
+			},
+		});
+		request.mockResolvedValueOnce({
+			data: suiteCheckRunsMismatchResponse,
+		});
+		request.mockResolvedValueOnce({
+			data: commitCheckRunsFallbackResponse,
+		});
 
-		const result = await getCurrentRunCheckSuiteId(context);
+		const result = await getCurrentRunCheckSuiteId(context, HEAD_SHA);
+		expect(result).toBe(654);
+		expect(request).toHaveBeenCalledTimes(3);
+		expect(request.mock.calls[2][0]).toBe(
+			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/commits/${HEAD_SHA}/check-runs`,
+		);
+	});
+
+	test("logs warning and returns null when both primary and fallback lookups fail", async () => {
+		process.env.GITHUB_RUN_ID = "123";
+		request.mockResolvedValueOnce({
+			data: {
+				check_suite_id: 987,
+			},
+		});
+		request.mockResolvedValueOnce({
+			data: suiteCheckRunsMismatchResponse,
+		});
+		request.mockResolvedValueOnce({
+			data: {
+				check_runs: [],
+			},
+		});
+
+		const result = await getCurrentRunCheckSuiteId(context, HEAD_SHA);
 		expect(result).toBeNull();
 		expect(core.warning).toHaveBeenCalledTimes(1);
 		expect(core.warning.mock.calls[0][0]).toContain("Could not resolve check suite");

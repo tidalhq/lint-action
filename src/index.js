@@ -141,7 +141,7 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const checkSuiteId = await getCurrentRunCheckSuiteId(context);
+		const checkSuiteId = await getCurrentRunCheckSuiteId(context, headSha);
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(

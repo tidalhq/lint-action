@@ -6714,17 +6714,68 @@ async function createCheck(
 }
 
 /**
+ * @param {string} runId - GitHub Actions run ID
+ * @param {Array<object> | undefined} checkRuns - Check runs returned by GitHub API
+ * @returns {boolean} - Whether any check run belongs to the workflow run
+ */
+function hasCheckRunForWorkflowRun(runId, checkRuns) {
+	if (!Array.isArray(checkRuns)) {
+		return false;
+	}
+
+	return checkRuns.some((checkRun) => {
+		const appSlug = checkRun && checkRun.app ? checkRun.app.slug : "";
+		const detailsUrl = (checkRun && (checkRun.details_url || checkRun.html_url)) || "";
+		return (
+			appSlug === "github-actions" &&
+			typeof detailsUrl === "string" &&
+			detailsUrl.includes(`/actions/runs/${runId}/`)
+		);
+	});
+}
+
+/**
+ * @param {string} runId - GitHub Actions run ID
+ * @param {Array<object> | undefined} checkRuns - Check runs returned by GitHub API
+ * @returns {number | null} - Matching check suite ID if found
+ */
+function getSuiteIdForWorkflowRun(runId, checkRuns) {
+	if (!Array.isArray(checkRuns)) {
+		return null;
+	}
+
+	const matchingRun = checkRuns.find((checkRun) => {
+		const appSlug = checkRun && checkRun.app ? checkRun.app.slug : "";
+		const checkSuiteId =
+			checkRun && checkRun.check_suite && typeof checkRun.check_suite.id === "number"
+				? checkRun.check_suite.id
+				: null;
+		const detailsUrl = (checkRun && (checkRun.details_url || checkRun.html_url)) || "";
+		return (
+			appSlug === "github-actions" &&
+			typeof detailsUrl === "string" &&
+			detailsUrl.includes(`/actions/runs/${runId}/`) &&
+			checkSuiteId !== null
+		);
+	});
+
+	return matchingRun ? matchingRun.check_suite.id : null;
+}
+
+/**
  * Resolves the check suite ID of the current GitHub Actions workflow run
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
+ * @param {string | null} [headSha] - SHA of the commit being linted
  * @returns {Promise<number | null>} - Check suite ID if available
  */
-async function getCurrentRunCheckSuiteId(context) {
+async function getCurrentRunCheckSuiteId(context, headSha = null) {
 	const runId = process.env.GITHUB_RUN_ID;
 	if (!runId) {
 		return null;
 	}
 
 	try {
+		core.info(`Resolving check suite for workflow run ${runId}…`);
 		const { data } = await request(
 			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/actions/runs/${runId}`,
 			{
@@ -6736,13 +6787,70 @@ async function getCurrentRunCheckSuiteId(context) {
 				},
 			},
 		);
-		return typeof data.check_suite_id === "number" ? data.check_suite_id : null;
-	} catch (err) {
-		core.warning(
-			`Could not resolve check suite for workflow run ${runId}. Falling back to creating check runs without check_suite_id. ${err.message}`,
+		const checkSuiteId = typeof data.check_suite_id === "number" ? data.check_suite_id : null;
+		if (checkSuiteId !== null) {
+			try {
+				const suiteChecksResponse = await request(
+					`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-suites/${checkSuiteId}/check-runs`,
+					{
+						method: "GET",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${context.token}`,
+							"User-Agent": actionName,
+						},
+					},
+				);
+
+				if (hasCheckRunForWorkflowRun(runId, suiteChecksResponse.data.check_runs)) {
+					core.info(`Using check suite ${checkSuiteId} for workflow run ${runId}.`);
+					return checkSuiteId;
+				}
+				core.info(
+					`Check suite ${checkSuiteId} does not match workflow run ${runId}. Attempting fallback lookup.`,
+				);
+			} catch (suiteError) {
+				core.info(
+					`Could not verify candidate check suite ${checkSuiteId}: ${suiteError.message}. Attempting fallback lookup.`,
+				);
+			}
+		}
+	} catch (runError) {
+		core.info(
+			`Could not resolve candidate check suite from workflow run ${runId}: ${runError.message}. Attempting fallback lookup.`,
 		);
-		return null;
 	}
+
+	if (headSha) {
+		try {
+			const commitChecksResponse = await request(
+				`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/commits/${headSha}/check-runs`,
+				{
+					method: "GET",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${context.token}`,
+						"User-Agent": actionName,
+					},
+				},
+			);
+
+			const fallbackSuiteId = getSuiteIdForWorkflowRun(runId, commitChecksResponse.data.check_runs);
+			if (fallbackSuiteId !== null) {
+				core.info(`Resolved check suite ${fallbackSuiteId} from commit check-runs fallback.`);
+				return fallbackSuiteId;
+			}
+		} catch (fallbackError) {
+			core.info(
+				`Commit check-runs fallback failed for workflow run ${runId}: ${fallbackError.message}.`,
+			);
+		}
+	}
+
+	core.warning(
+		`Could not resolve check suite for workflow run ${runId}. Falling back to creating check runs without check_suite_id.`,
+	);
+	return null;
 }
 
 module.exports = { createCheck, getCurrentRunCheckSuiteId };
@@ -11170,7 +11278,7 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const checkSuiteId = await getCurrentRunCheckSuiteId(context);
+		const checkSuiteId = await getCurrentRunCheckSuiteId(context, headSha);
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(

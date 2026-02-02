@@ -1,0 +1,13 @@
+{
+	"check_runs": [
+		{
+			"app": {
+				"slug": "github-actions"
+			},
+			"details_url": "https://github.com/org/repo/actions/runs/123/job/321",
+			"check_suite": {
+				"id": 654
+			}
+		}
+	]
+}

@@ -17,8 +17,17 @@ const { capitalizeFirstLetter } = require("../utils/string");
  * @param {boolean} neutralCheckOnWarning - Whether the check run should conclude as neutral if
  * there are only warnings
  * @param {string} summary - Summary for the GitHub check
+ * @param {number | null} [checkSuiteId] - ID of the check suite the check run should be attached to
  */
-async function createCheck(linterName, sha, context, lintResult, neutralCheckOnWarning, summary) {
+async function createCheck(
+	linterName,
+	sha,
+	context,
+	lintResult,
+	neutralCheckOnWarning,
+	summary,
+	checkSuiteId = null,
+) {
 	let annotations = [];
 	for (const level of ["error", "warning"]) {
 		annotations = [
@@ -62,6 +71,9 @@ async function createCheck(linterName, sha, context, lintResult, neutralCheckOnW
 			annotations,
 		},
 	};
+	if (checkSuiteId !== null) {
+		body.check_suite_id = checkSuiteId;
+	}
 	try {
 		core.info(
 			`Creating GitHub check with ${conclusion} conclusion and ${annotations.length} annotations for ${linterName}…`,
@@ -99,4 +111,36 @@ async function createCheck(linterName, sha, context, lintResult, neutralCheckOnW
 	}
 }
 
-module.exports = { createCheck };
+/**
+ * Resolves the check suite ID of the current GitHub Actions workflow run
+ * @param {GithubContext} context - Information about the GitHub repository and action trigger event
+ * @returns {Promise<number | null>} - Check suite ID if available
+ */
+async function getCurrentRunCheckSuiteId(context) {
+	const runId = process.env.GITHUB_RUN_ID;
+	if (!runId) {
+		return null;
+	}
+
+	try {
+		const { data } = await request(
+			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/actions/runs/${runId}`,
+			{
+				method: "GET",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${context.token}`,
+					"User-Agent": actionName,
+				},
+			},
+		);
+		return typeof data.check_suite_id === "number" ? data.check_suite_id : null;
+	} catch (err) {
+		core.warning(
+			`Could not resolve check suite for workflow run ${runId}. Falling back to creating check runs without check_suite_id. ${err.message}`,
+		);
+		return null;
+	}
+}
+
+module.exports = { createCheck, getCurrentRunCheckSuiteId };

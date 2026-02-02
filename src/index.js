@@ -4,7 +4,7 @@ const { join } = require("path");
 const core = require("@actions/core");
 
 const git = require("./git");
-const { createCheck } = require("./github/api");
+const { createCheck, getCurrentRunCheckSuiteId } = require("./github/api");
 const { getContext } = require("./github/context");
 const linters = require("./linters");
 const { getSummary } = require("./utils/lint-result");
@@ -133,9 +133,18 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
+		const checkSuiteId = await getCurrentRunCheckSuiteId(context);
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
-				createCheck(lintCheckName, headSha, context, lintResult, neutralCheckOnWarning, summary),
+				createCheck(
+					lintCheckName,
+					headSha,
+					context,
+					lintResult,
+					neutralCheckOnWarning,
+					summary,
+					checkSuiteId,
+				),
 			),
 		);
 	} catch (err) {

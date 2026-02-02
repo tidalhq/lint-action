@@ -3,6 +3,8 @@ const { join } = require("path");
 
 const core = require("@actions/core");
 
+const { version } = require("../package.json");
+
 const git = require("./git");
 const { createCheck, getCurrentRunCheckSuiteId } = require("./github/api");
 const { getContext } = require("./github/context");
@@ -13,6 +15,7 @@ const { getSummary } = require("./utils/lint-result");
  * Parses the action configuration and runs all enabled linters on matching files
  */
 async function runAction() {
+	core.info(`lint-action v${version}`);
 	const context = getContext();
 	const autoFix = core.getInput("auto_fix") === "true";
 	const commit = core.getInput("commit") === "true";

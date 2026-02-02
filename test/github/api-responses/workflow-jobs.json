@@ -1,0 +1,14 @@
+{
+	"jobs": [
+		{
+			"id": 1,
+			"name": "Run linters",
+			"check_run_url": "https://api.github.com/repos/example/example/check-runs/111"
+		},
+		{
+			"id": 2,
+			"name": "Type check (ts 5.9)",
+			"check_run_url": "https://api.github.com/repos/example/example/check-runs/222"
+		}
+	]
+}

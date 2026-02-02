@@ -23,6 +23,23 @@ async function runAction() {
 	const commitMessage = core.getInput("commit_message", { required: true });
 	const checkName = core.getInput("check_name", { required: true });
 	const neutralCheckOnWarning = core.getInput("neutral_check_on_warning") === "true";
+	const checkSuiteMode = (core.getInput("check_suite_mode") || "auto").trim().toLowerCase();
+	const checkSuiteJobName = core.getInput("check_suite_job_name");
+	const checkSuiteDebug = core.getInput("check_suite_debug") === "true";
+	const checkSuiteResolutionRetriesInput = Number.parseInt(
+		core.getInput("check_suite_resolution_retries"),
+		10,
+	);
+	const checkSuiteResolutionDelayMsInput = Number.parseInt(
+		core.getInput("check_suite_resolution_delay_ms"),
+		10,
+	);
+	const checkSuiteResolutionRetries = Number.isInteger(checkSuiteResolutionRetriesInput)
+		? Math.max(checkSuiteResolutionRetriesInput, 1)
+		: 6;
+	const checkSuiteResolutionDelayMs = Number.isInteger(checkSuiteResolutionDelayMsInput)
+		? Math.max(checkSuiteResolutionDelayMsInput, 0)
+		: 1500;
 	const isPullRequest =
 		context.eventName === "pull_request" || context.eventName === "pull_request_target";
 
@@ -141,7 +158,14 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const checkSuiteId = await getCurrentRunCheckSuiteId(context, headSha);
+		const checkSuiteId = await getCurrentRunCheckSuiteId(context, {
+			headSha,
+			mode: checkSuiteMode,
+			jobNameHint: checkSuiteJobName,
+			debug: checkSuiteDebug,
+			retries: checkSuiteResolutionRetries,
+			delayMs: checkSuiteResolutionDelayMs,
+		});
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(

@@ -6,7 +6,7 @@ const core = require("@actions/core");
 const { version } = require("../package.json");
 
 const git = require("./git");
-const { createCheck, getCurrentRunCheckSuiteInfo } = require("./github/api");
+const { createCheck } = require("./github/api");
 const { getContext } = require("./github/context");
 const linters = require("./linters");
 const { getSummary } = require("./utils/lint-result");
@@ -26,14 +26,6 @@ async function runAction() {
 	const commitMessage = core.getInput("commit_message", { required: true });
 	const checkName = core.getInput("check_name", { required: true });
 	const neutralCheckOnWarning = core.getInput("neutral_check_on_warning") === "true";
-	const checkSuiteJobCheckRunIdInput = Number.parseInt(
-		core.getInput("check_suite_job_check_run_id", { required: true }),
-		10,
-	);
-	const checkSuiteDebug = core.getInput("check_suite_debug") === "true";
-	const checkSuiteJobCheckRunId = Number.isInteger(checkSuiteJobCheckRunIdInput)
-		? checkSuiteJobCheckRunIdInput
-		: null;
 	const isPullRequest =
 		context.eventName === "pull_request" || context.eventName === "pull_request_target";
 
@@ -152,35 +144,15 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const { checkSuiteId, checkRunHeadSha } = await getCurrentRunCheckSuiteInfo(context, {
-			jobCheckRunId: checkSuiteJobCheckRunId,
-			debug: checkSuiteDebug,
-		});
-		const checkHeadSha = checkRunHeadSha || headSha;
-		if (checkSuiteDebug) {
-			core.info(
-				`[check-suite-debug] ${JSON.stringify({
-					event: "suite-resolution-apply",
-					jobCheckRunId: checkSuiteJobCheckRunId,
-					checkSuiteId,
-					checkRunHeadSha,
-					fallbackHeadSha: headSha,
-					checkHeadSha,
-					checkCount: checks.length,
-					checkNames: checks.map(({ lintCheckName }) => lintCheckName),
-				})}`,
-			);
-		}
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(
 					lintCheckName,
-					checkHeadSha,
+					headSha,
 					context,
 					lintResult,
 					neutralCheckOnWarning,
 					summary,
-					checkSuiteId,
 				),
 			),
 		);

@@ -462,9 +462,9 @@ With `auto_fix` set to `true`, by default the action will try and fix code issue
 
 - **`neutral_check_on_warning`:** Whether the check run should conclude with a neutral status instead of success when the linter finds only warnings. Default: `false`
 
-- **`check_suite_job_check_run_id`:** Check run ID for the current job (use `${{ job.check_run_id }}`) to attach checks to the workflow suite. Required.
+- **`check_suite_job_check_run_id`:** Deprecated (ignored). Previously used to attach checks to the workflow suite.
 
-- **`check_suite_debug`:** Emit detailed check-suite resolution logs (helpful for debugging workflow/suite lookups). Default: `false`
+- **`check_suite_debug`:** Deprecated (ignored). Previously emitted check-suite resolution logs. Default: `false`
 
 ### Linter support
 

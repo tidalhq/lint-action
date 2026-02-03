@@ -6682,13 +6682,7 @@ async function createCheck(
 		);
 		await request(`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs`, {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				// "Accept" header is required to access Checks API during preview period
-				Accept: "application/vnd.github.antiope-preview+json",
-				Authorization: `Bearer ${context.token}`,
-				"User-Agent": actionName,
-			},
+			headers: getApiHeaders(context),
 			body,
 		});
 		core.info(`${linterName} check created successfully`);
@@ -6754,6 +6748,8 @@ function summarizeCheckRunForDebug(data) {
 function getApiHeaders(context) {
 	return {
 		"Content-Type": "application/json",
+		Accept: "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28",
 		Authorization: `Bearer ${context.token}`,
 		"User-Agent": actionName,
 	};
@@ -11081,7 +11077,7 @@ exports.quoteAll = quoteAll;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"lint-action","version":"2.3.6","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
+module.exports = JSON.parse('{"name":"lint-action","version":"2.3.8","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
 
 /***/ })
 
@@ -11134,7 +11130,7 @@ const core = __nccwpck_require__(2186);
 const { version } = __nccwpck_require__(4147);
 
 const git = __nccwpck_require__(109);
-const { createCheck, getCurrentRunCheckSuiteInfo } = __nccwpck_require__(1872);
+const { createCheck } = __nccwpck_require__(1872);
 const { getContext } = __nccwpck_require__(6476);
 const linters = __nccwpck_require__(8565);
 const { getSummary } = __nccwpck_require__(9149);
@@ -11154,14 +11150,6 @@ async function runAction() {
 	const commitMessage = core.getInput("commit_message", { required: true });
 	const checkName = core.getInput("check_name", { required: true });
 	const neutralCheckOnWarning = core.getInput("neutral_check_on_warning") === "true";
-	const checkSuiteJobCheckRunIdInput = Number.parseInt(
-		core.getInput("check_suite_job_check_run_id", { required: true }),
-		10,
-	);
-	const checkSuiteDebug = core.getInput("check_suite_debug") === "true";
-	const checkSuiteJobCheckRunId = Number.isInteger(checkSuiteJobCheckRunIdInput)
-		? checkSuiteJobCheckRunIdInput
-		: null;
 	const isPullRequest =
 		context.eventName === "pull_request" || context.eventName === "pull_request_target";
 
@@ -11280,35 +11268,15 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const { checkSuiteId, checkRunHeadSha } = await getCurrentRunCheckSuiteInfo(context, {
-			jobCheckRunId: checkSuiteJobCheckRunId,
-			debug: checkSuiteDebug,
-		});
-		const checkHeadSha = checkRunHeadSha || headSha;
-		if (checkSuiteDebug) {
-			core.info(
-				`[check-suite-debug] ${JSON.stringify({
-					event: "suite-resolution-apply",
-					jobCheckRunId: checkSuiteJobCheckRunId,
-					checkSuiteId,
-					checkRunHeadSha,
-					fallbackHeadSha: headSha,
-					checkHeadSha,
-					checkCount: checks.length,
-					checkNames: checks.map(({ lintCheckName }) => lintCheckName),
-				})}`,
-			);
-		}
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(
 					lintCheckName,
-					checkHeadSha,
+					headSha,
 					context,
 					lintResult,
 					neutralCheckOnWarning,
 					summary,
-					checkSuiteId,
 				),
 			),
 		);

@@ -80,13 +80,7 @@ async function createCheck(
 		);
 		await request(`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs`, {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				// "Accept" header is required to access Checks API during preview period
-				Accept: "application/vnd.github.antiope-preview+json",
-				Authorization: `Bearer ${context.token}`,
-				"User-Agent": actionName,
-			},
+			headers: getApiHeaders(context),
 			body,
 		});
 		core.info(`${linterName} check created successfully`);
@@ -152,6 +146,8 @@ function summarizeCheckRunForDebug(data) {
 function getApiHeaders(context) {
 	return {
 		"Content-Type": "application/json",
+		Accept: "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28",
 		Authorization: `Bearer ${context.token}`,
 		"User-Agent": actionName,
 	};

@@ -44,10 +44,11 @@ inputs:
     required: false
     default: "false"
   check_suite_job_check_run_id:
-    description: Check run ID for the current job (use `job.check_run_id`) to attach checks to the workflow suite
-    required: true
+    description: Deprecated (ignored). Previously used to attach checks to the workflow suite.
+    required: false
+    default: ""
   check_suite_debug:
-    description: Emit detailed check suite resolution logs
+    description: Deprecated (ignored). Previously emitted check suite resolution logs.
     required: false
     default: "false"
 

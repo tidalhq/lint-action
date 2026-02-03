@@ -44,7 +44,7 @@ inputs:
     required: false
     default: "false"
   check_suite_job_check_run_id:
-    description: Check run ID for the current job (use `${{ job.check_run_id }}`) to attach checks to the workflow suite
+    description: Check run ID for the current job (use `job.check_run_id`) to attach checks to the workflow suite
     required: true
   check_suite_debug:
     description: Emit detailed check suite resolution logs

@@ -74,13 +74,26 @@ async function createCheck(
 	if (checkSuiteId !== null) {
 		body.check_suite_id = checkSuiteId;
 	}
-	const requestUrl = `${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs`;
+	const apiBaseUrl = getApiBaseUrl();
+	const requestUrl = `${apiBaseUrl}/repos/${context.repository.repoName}/check-runs`;
+	const requestHeaders = getApiHeaders(context);
+	core.debug(
+		`[check-run-env] ${JSON.stringify({
+			linterName,
+			apiBaseUrl,
+			repo: context.repository.repoName,
+			hasToken: Boolean(context.token),
+			tokenLength: context.token ? context.token.length : 0,
+			headerKeys: Object.keys(requestHeaders),
+		})}`,
+	);
 	core.debug(
 		`[check-run-request] ${JSON.stringify({
 			linterName,
 			request: {
 				url: requestUrl,
 				method: "POST",
+				headers: sanitizeHeaders(requestHeaders),
 				body: {
 					name: body.name,
 					head_sha: body.head_sha,
@@ -97,7 +110,7 @@ async function createCheck(
 		);
 		const response = await request(requestUrl, {
 			method: "POST",
-			headers: getApiHeaders(context),
+			headers: requestHeaders,
 			body,
 		});
 		const responseHeaders = response && response.res && response.res.headers;
@@ -145,9 +158,26 @@ async function createCheck(
 			errorMessage += `; github_request_id=${requestId}`;
 		}
 		if (err.requestInfo || err.responseHeaders || err.statusCode) {
+			const requestInfo = err.requestInfo
+				? {
+						...err.requestInfo,
+						headers: sanitizeHeaders(err.requestInfo.headers),
+					}
+				: {
+						url: requestUrl,
+						method: "POST",
+						headers: sanitizeHeaders(requestHeaders),
+						body: {
+							name: body.name,
+							head_sha: body.head_sha,
+							conclusion: body.conclusion,
+							annotations: annotations.length,
+							title: body.output.title,
+						},
+					};
 			core.debug(
 				`[check-run-request] ${JSON.stringify({
-					request: err.requestInfo || null,
+					request: requestInfo,
 					response:
 						err.statusCode || err.responseHeaders
 							? {
@@ -213,13 +243,41 @@ function getApiHeaders(context) {
 }
 
 /**
+ * Resolves the GitHub API base URL, defaulting to api.github.com when unset.
+ * @returns {string} - Base API URL
+ */
+function getApiBaseUrl() {
+	const envUrl = typeof process.env.GITHUB_API_URL === "string" ? process.env.GITHUB_API_URL : "";
+	return envUrl && envUrl.trim() ? envUrl : "https://api.github.com";
+}
+
+/**
+ * Sanitizes headers for debug logging, redacting Authorization values.
+ * @param {object} headers - Request headers
+ * @returns {object} - Sanitized headers
+ */
+function sanitizeHeaders(headers) {
+	if (!headers || typeof headers !== "object") {
+		return headers;
+	}
+	const sanitized = { ...headers };
+	if (sanitized.Authorization) {
+		sanitized.Authorization = "Bearer [redacted]";
+	}
+	if (sanitized.authorization) {
+		sanitized.authorization = "Bearer [redacted]";
+	}
+	return sanitized;
+}
+
+/**
  * Performs an authenticated GET request to a repository-scoped GitHub API path.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @param {string} path - Relative API path
  * @returns {Promise<object>} - API response body
  */
 async function getApi(context, path) {
-	return request(`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/${path}`, {
+	return request(`${getApiBaseUrl()}/repos/${context.repository.repoName}/${path}`, {
 		method: "GET",
 		headers: getApiHeaders(context),
 	});

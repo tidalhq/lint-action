@@ -19,12 +19,14 @@
 Emitted via `core.info` when `check_suite_debug` is true:
 - `suite-resolution-skipped` with reason `missing-job-check-run-id`
 - `suite-resolution-start` with `jobCheckRunId`
-- `suite-resolution-result` with `jobCheckRunId` and `checkSuiteId`
+- `suite-resolution-response` with a sanitized snapshot of the job check run response (id, head_sha, status, conclusion, check_suite.id)
+- `suite-resolution-result` with `jobCheckRunId`, `checkSuiteId`, and `checkRunHeadSha`
 - `suite-resolution-error` with `jobCheckRunId` and `errorMessage`
+- `suite-resolution-apply` with `jobCheckRunId`, resolved suite info, chosen `checkHeadSha`, and check names
 
 ## Key implementation points
 - `src/index.js` reads and validates `check_suite_job_check_run_id`, passes it to the suite resolver with `debug`.
-- `src/github/api.js` implements `getCurrentRunCheckSuiteInfo` to resolve `checkSuiteId` and `checkRunHeadSha` from `jobCheckRunId`.
+- `src/github/api.js` implements `getCurrentRunCheckSuiteInfo` to resolve `checkSuiteId` and `checkRunHeadSha` from `jobCheckRunId`, and logs a sanitized response snapshot when debug is enabled.
 - `createCheck` includes `check_suite_id` only when a suite ID is resolved.
 - Tests updated to cover: missing ID, resolved suite, missing suite, and error path.
 

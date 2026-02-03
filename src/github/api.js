@@ -86,6 +86,13 @@ async function createCheck(
 		core.info(`${linterName} check created successfully`);
 	} catch (err) {
 		let errorMessage = err.message;
+		const details = [];
+		if (err.code) {
+			details.push(`code: ${err.code}`);
+		}
+		if (typeof err.statusCode === "number") {
+			details.push(`status: ${err.statusCode}`);
+		}
 		if (err.data) {
 			try {
 				const errorData = JSON.parse(err.data);
@@ -98,6 +105,30 @@ async function createCheck(
 			} catch (e) {
 				// Ignore
 			}
+		}
+		if (details.length > 0) {
+			errorMessage += ` (${details.join(", ")})`;
+		}
+		const requestId =
+			err.responseHeaders &&
+			(err.responseHeaders["x-github-request-id"] ||
+				err.responseHeaders["X-GitHub-Request-Id"]);
+		if (requestId) {
+			errorMessage += `; github_request_id=${requestId}`;
+		}
+		if (err.requestInfo || err.responseHeaders || err.statusCode) {
+			core.debug(
+				`[check-run-request] ${JSON.stringify({
+					request: err.requestInfo || null,
+					response:
+						err.statusCode || err.responseHeaders
+							? {
+									statusCode: typeof err.statusCode === "number" ? err.statusCode : null,
+									headers: err.responseHeaders || null,
+								}
+							: null,
+				})}`,
+			);
 		}
 		core.error(errorMessage);
 

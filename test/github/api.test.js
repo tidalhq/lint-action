@@ -38,8 +38,13 @@ describe("createCheck()", () => {
 
 	beforeEach(() => {
 		request.mockReset();
+		core.debug.mockClear();
 		request.mockResolvedValue({
 			data: checkRunsResponse,
+			res: {
+				statusCode: 201,
+				headers: { "x-github-request-id": "REQ123" },
+			},
 		});
 	});
 
@@ -47,6 +52,8 @@ describe("createCheck()", () => {
 		await expect(
 			createCheck("check-name", "sha", context, LINT_RESULT, false, "summary"),
 		).resolves.toEqual(undefined);
+		expect(core.debug).toHaveBeenCalledWith(expect.stringContaining("[check-run-request]"));
+		expect(core.debug).toHaveBeenCalledWith(expect.stringContaining("[check-run-response]"));
 	});
 
 	test("includes `check_suite_id` in request body when provided", async () => {

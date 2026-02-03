@@ -125,6 +125,26 @@ function logSuiteDebug(debug, payload) {
 }
 
 /**
+ * Extracts a safe subset of check run fields for debug logging.
+ * @param {object} data - Check run response data
+ * @returns {object} - Minimal, safe debug snapshot
+ */
+function summarizeCheckRunForDebug(data) {
+	if (!data || typeof data !== "object") {
+		return { present: false };
+	}
+	return {
+		present: true,
+		id: typeof data.id === "number" ? data.id : null,
+		headSha: typeof data.head_sha === "string" ? data.head_sha : null,
+		status: typeof data.status === "string" ? data.status : null,
+		conclusion: typeof data.conclusion === "string" ? data.conclusion : null,
+		checkSuiteId:
+			data.check_suite && typeof data.check_suite.id === "number" ? data.check_suite.id : null,
+	};
+}
+
+/**
  * Builds common authenticated GitHub API headers.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @returns {object} - Authenticated request headers
@@ -151,14 +171,14 @@ async function getApi(context, path) {
 }
 
 /**
- * Resolves the check suite ID of the current GitHub Actions workflow run
+ * Resolves the check suite info of the current GitHub Actions workflow run.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @param {object} [options] - Check suite resolution options
  * @param {number | null} [options.jobCheckRunId] - Check run ID for the current job
  * @param {boolean} [options.debug] - Whether to emit detailed check suite logs
- * @returns {Promise<number | null>} - Check suite ID if available
+ * @returns {Promise<{checkSuiteId: number | null, checkRunHeadSha: string | null}>} - Check suite info
  */
-async function getCurrentRunCheckSuiteId(context, options = {}) {
+async function getCurrentRunCheckSuiteInfo(context, options = {}) {
 	const { jobCheckRunId = null, debug = false } = options;
 
 	if (!Number.isInteger(jobCheckRunId) || jobCheckRunId <= 0) {
@@ -166,7 +186,7 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 			event: "suite-resolution-skipped",
 			reason: "missing-job-check-run-id",
 		});
-		return null;
+		return { checkSuiteId: null, checkRunHeadSha: null };
 	}
 
 	logSuiteDebug(debug, {
@@ -176,6 +196,11 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 
 	try {
 		const checkRunResponse = await getApi(context, `check-runs/${jobCheckRunId}`);
+		logSuiteDebug(debug, {
+			event: "suite-resolution-response",
+			jobCheckRunId,
+			checkRun: summarizeCheckRunForDebug(checkRunResponse && checkRunResponse.data),
+		});
 		const checkSuiteId =
 			checkRunResponse &&
 			checkRunResponse.data &&
@@ -183,11 +208,18 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 			typeof checkRunResponse.data.check_suite.id === "number"
 				? checkRunResponse.data.check_suite.id
 				: null;
+		const checkRunHeadSha =
+			checkRunResponse &&
+			checkRunResponse.data &&
+			typeof checkRunResponse.data.head_sha === "string"
+				? checkRunResponse.data.head_sha
+				: null;
 
 		logSuiteDebug(debug, {
 			event: "suite-resolution-result",
 			jobCheckRunId,
 			checkSuiteId,
+			checkRunHeadSha,
 		});
 
 		if (checkSuiteId === null) {
@@ -196,7 +228,7 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 			);
 		}
 
-		return checkSuiteId;
+		return { checkSuiteId, checkRunHeadSha };
 	} catch (err) {
 		logSuiteDebug(debug, {
 			event: "suite-resolution-error",
@@ -206,8 +238,8 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 		core.warning(
 			"Could not resolve check suite from job.check_run_id; creating check runs without check_suite_id.",
 		);
-		return null;
+		return { checkSuiteId: null, checkRunHeadSha: null };
 	}
 }
 
-module.exports = { createCheck, getCurrentRunCheckSuiteId };
+module.exports = { createCheck, getCurrentRunCheckSuiteInfo };

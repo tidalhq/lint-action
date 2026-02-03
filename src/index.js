@@ -6,7 +6,7 @@ const core = require("@actions/core");
 const { version } = require("../package.json");
 
 const git = require("./git");
-const { createCheck, getCurrentRunCheckSuiteId } = require("./github/api");
+const { createCheck, getCurrentRunCheckSuiteInfo } = require("./github/api");
 const { getContext } = require("./github/context");
 const linters = require("./linters");
 const { getSummary } = require("./utils/lint-result");
@@ -152,15 +152,30 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const checkSuiteId = await getCurrentRunCheckSuiteId(context, {
+		const { checkSuiteId, checkRunHeadSha } = await getCurrentRunCheckSuiteInfo(context, {
 			jobCheckRunId: checkSuiteJobCheckRunId,
 			debug: checkSuiteDebug,
 		});
+		const checkHeadSha = checkRunHeadSha || headSha;
+		if (checkSuiteDebug) {
+			core.info(
+				`[check-suite-debug] ${JSON.stringify({
+					event: "suite-resolution-apply",
+					jobCheckRunId: checkSuiteJobCheckRunId,
+					checkSuiteId,
+					checkRunHeadSha,
+					fallbackHeadSha: headSha,
+					checkHeadSha,
+					checkCount: checks.length,
+					checkNames: checks.map(({ lintCheckName }) => lintCheckName),
+				})}`,
+			);
+		}
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(
 					lintCheckName,
-					headSha,
+					checkHeadSha,
 					context,
 					lintResult,
 					neutralCheckOnWarning,

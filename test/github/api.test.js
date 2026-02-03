@@ -1,6 +1,6 @@
 const core = require("@actions/core");
 
-const { createCheck, getCurrentRunCheckSuiteId } = require("../../src/github/api");
+const { createCheck, getCurrentRunCheckSuiteInfo } = require("../../src/github/api");
 const request = require("../../src/utils/request");
 const checkRunsResponse = require("./api-responses/check-runs.json");
 const workflowJobCheckRunResponse = require("./api-responses/workflow-job-check-run.json");
@@ -70,7 +70,7 @@ describe("createCheck()", () => {
 	});
 });
 
-describe("getCurrentRunCheckSuiteId()", () => {
+describe("getCurrentRunCheckSuiteInfo()", () => {
 	const context = {
 		actor: USERNAME,
 		event: {},
@@ -92,8 +92,8 @@ describe("getCurrentRunCheckSuiteId()", () => {
 	});
 
 	test("returns null when job check run id is missing", async () => {
-		const result = await getCurrentRunCheckSuiteId(context, { debug: true });
-		expect(result).toBeNull();
+		const result = await getCurrentRunCheckSuiteInfo(context, { debug: true });
+		expect(result).toEqual({ checkSuiteId: null, checkRunHeadSha: null });
 		expect(request).not.toHaveBeenCalled();
 	});
 
@@ -102,12 +102,12 @@ describe("getCurrentRunCheckSuiteId()", () => {
 			data: workflowJobCheckRunResponse,
 		});
 
-		const result = await getCurrentRunCheckSuiteId(context, {
+		const result = await getCurrentRunCheckSuiteInfo(context, {
 			jobCheckRunId: 111,
 			debug: true,
 		});
 
-		expect(result).toBe(456);
+		expect(result).toEqual({ checkSuiteId: 456, checkRunHeadSha: "abc123" });
 		expect(request).toHaveBeenCalledTimes(1);
 		expect(request.mock.calls[0][0]).toBe(
 			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs/111`,
@@ -120,12 +120,12 @@ describe("getCurrentRunCheckSuiteId()", () => {
 			data: {},
 		});
 
-		const result = await getCurrentRunCheckSuiteId(context, {
+		const result = await getCurrentRunCheckSuiteInfo(context, {
 			jobCheckRunId: 222,
 			debug: true,
 		});
 
-		expect(result).toBeNull();
+		expect(result).toEqual({ checkSuiteId: null, checkRunHeadSha: null });
 		expect(core.warning).toHaveBeenCalledTimes(1);
 		expect(core.warning.mock.calls[0][0]).toContain(
 			"Could not resolve check suite from job.check_run_id",
@@ -135,12 +135,12 @@ describe("getCurrentRunCheckSuiteId()", () => {
 	test("warns and returns null when request fails", async () => {
 		request.mockRejectedValueOnce(new Error("boom"));
 
-		const result = await getCurrentRunCheckSuiteId(context, {
+		const result = await getCurrentRunCheckSuiteInfo(context, {
 			jobCheckRunId: 333,
 			debug: true,
 		});
 
-		expect(result).toBeNull();
+		expect(result).toEqual({ checkSuiteId: null, checkRunHeadSha: null });
 		expect(core.warning).toHaveBeenCalledTimes(1);
 		expect(core.warning.mock.calls[0][0]).toContain(
 			"Could not resolve check suite from job.check_run_id",

@@ -6727,6 +6727,26 @@ function logSuiteDebug(debug, payload) {
 }
 
 /**
+ * Extracts a safe subset of check run fields for debug logging.
+ * @param {object} data - Check run response data
+ * @returns {object} - Minimal, safe debug snapshot
+ */
+function summarizeCheckRunForDebug(data) {
+	if (!data || typeof data !== "object") {
+		return { present: false };
+	}
+	return {
+		present: true,
+		id: typeof data.id === "number" ? data.id : null,
+		headSha: typeof data.head_sha === "string" ? data.head_sha : null,
+		status: typeof data.status === "string" ? data.status : null,
+		conclusion: typeof data.conclusion === "string" ? data.conclusion : null,
+		checkSuiteId:
+			data.check_suite && typeof data.check_suite.id === "number" ? data.check_suite.id : null,
+	};
+}
+
+/**
  * Builds common authenticated GitHub API headers.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @returns {object} - Authenticated request headers
@@ -6753,14 +6773,14 @@ async function getApi(context, path) {
 }
 
 /**
- * Resolves the check suite ID of the current GitHub Actions workflow run
+ * Resolves the check suite info of the current GitHub Actions workflow run.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @param {object} [options] - Check suite resolution options
  * @param {number | null} [options.jobCheckRunId] - Check run ID for the current job
  * @param {boolean} [options.debug] - Whether to emit detailed check suite logs
- * @returns {Promise<number | null>} - Check suite ID if available
+ * @returns {Promise<{checkSuiteId: number | null, checkRunHeadSha: string | null}>} - Check suite info
  */
-async function getCurrentRunCheckSuiteId(context, options = {}) {
+async function getCurrentRunCheckSuiteInfo(context, options = {}) {
 	const { jobCheckRunId = null, debug = false } = options;
 
 	if (!Number.isInteger(jobCheckRunId) || jobCheckRunId <= 0) {
@@ -6768,7 +6788,7 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 			event: "suite-resolution-skipped",
 			reason: "missing-job-check-run-id",
 		});
-		return null;
+		return { checkSuiteId: null, checkRunHeadSha: null };
 	}
 
 	logSuiteDebug(debug, {
@@ -6778,6 +6798,11 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 
 	try {
 		const checkRunResponse = await getApi(context, `check-runs/${jobCheckRunId}`);
+		logSuiteDebug(debug, {
+			event: "suite-resolution-response",
+			jobCheckRunId,
+			checkRun: summarizeCheckRunForDebug(checkRunResponse && checkRunResponse.data),
+		});
 		const checkSuiteId =
 			checkRunResponse &&
 			checkRunResponse.data &&
@@ -6785,11 +6810,18 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 			typeof checkRunResponse.data.check_suite.id === "number"
 				? checkRunResponse.data.check_suite.id
 				: null;
+		const checkRunHeadSha =
+			checkRunResponse &&
+			checkRunResponse.data &&
+			typeof checkRunResponse.data.head_sha === "string"
+				? checkRunResponse.data.head_sha
+				: null;
 
 		logSuiteDebug(debug, {
 			event: "suite-resolution-result",
 			jobCheckRunId,
 			checkSuiteId,
+			checkRunHeadSha,
 		});
 
 		if (checkSuiteId === null) {
@@ -6798,7 +6830,7 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 			);
 		}
 
-		return checkSuiteId;
+		return { checkSuiteId, checkRunHeadSha };
 	} catch (err) {
 		logSuiteDebug(debug, {
 			event: "suite-resolution-error",
@@ -6808,11 +6840,11 @@ async function getCurrentRunCheckSuiteId(context, options = {}) {
 		core.warning(
 			"Could not resolve check suite from job.check_run_id; creating check runs without check_suite_id.",
 		);
-		return null;
+		return { checkSuiteId: null, checkRunHeadSha: null };
 	}
 }
 
-module.exports = { createCheck, getCurrentRunCheckSuiteId };
+module.exports = { createCheck, getCurrentRunCheckSuiteInfo };
 
 
 /***/ }),
@@ -11049,7 +11081,7 @@ exports.quoteAll = quoteAll;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"lint-action","version":"2.3.4","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
+module.exports = JSON.parse('{"name":"lint-action","version":"2.3.6","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
 
 /***/ })
 
@@ -11102,7 +11134,7 @@ const core = __nccwpck_require__(2186);
 const { version } = __nccwpck_require__(4147);
 
 const git = __nccwpck_require__(109);
-const { createCheck, getCurrentRunCheckSuiteId } = __nccwpck_require__(1872);
+const { createCheck, getCurrentRunCheckSuiteInfo } = __nccwpck_require__(1872);
 const { getContext } = __nccwpck_require__(6476);
 const linters = __nccwpck_require__(8565);
 const { getSummary } = __nccwpck_require__(9149);
@@ -11248,15 +11280,30 @@ async function runAction() {
 	core.startGroup("Create check runs with commit annotations");
 	let groupClosed = false;
 	try {
-		const checkSuiteId = await getCurrentRunCheckSuiteId(context, {
+		const { checkSuiteId, checkRunHeadSha } = await getCurrentRunCheckSuiteInfo(context, {
 			jobCheckRunId: checkSuiteJobCheckRunId,
 			debug: checkSuiteDebug,
 		});
+		const checkHeadSha = checkRunHeadSha || headSha;
+		if (checkSuiteDebug) {
+			core.info(
+				`[check-suite-debug] ${JSON.stringify({
+					event: "suite-resolution-apply",
+					jobCheckRunId: checkSuiteJobCheckRunId,
+					checkSuiteId,
+					checkRunHeadSha,
+					fallbackHeadSha: headSha,
+					checkHeadSha,
+					checkCount: checks.length,
+					checkNames: checks.map(({ lintCheckName }) => lintCheckName),
+				})}`,
+			);
+		}
 		await Promise.all(
 			checks.map(({ lintCheckName, lintResult, summary }) =>
 				createCheck(
 					lintCheckName,
-					headSha,
+					checkHeadSha,
 					context,
 					lintResult,
 					neutralCheckOnWarning,

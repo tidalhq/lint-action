@@ -1,5 +1,6 @@
 {
 	"id": 111,
+	"head_sha": "abc123",
 	"check_suite": {
 		"id": 456
 	}

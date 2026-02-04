@@ -43,14 +43,6 @@ inputs:
     description: Whether the check run should conclude with a neutral status instead of success when the linter finds only warnings
     required: false
     default: "false"
-  check_suite_job_check_run_id:
-    description: Deprecated (ignored). Previously used to attach checks to the workflow suite.
-    required: false
-    default: ""
-  check_suite_debug:
-    description: Deprecated (ignored). Previously emitted check suite resolution logs.
-    required: false
-    default: "false"
 
   # CSS
 

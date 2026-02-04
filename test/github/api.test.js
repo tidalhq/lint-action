@@ -54,9 +54,6 @@ describe("createCheck()", () => {
 		).resolves.toEqual(undefined);
 		expect(core.debug).toHaveBeenCalledWith(expect.stringContaining("[check-run-request]"));
 		expect(core.debug).toHaveBeenCalledWith(expect.stringContaining("[check-run-response]"));
-		expect(core.debug).toHaveBeenCalledWith(
-			expect.stringContaining('"Authorization":"Bearer [redacted]"'),
-		);
 	});
 
 	test("includes `check_suite_id` in request body when provided", async () => {
@@ -86,7 +83,7 @@ describe("createCheck()", () => {
 		err.requestInfo = {
 			url: "https://api.github.com/repos/org/repo/check-runs",
 			method: "POST",
-			headers: { Authorization: "Bearer test-token" },
+			headers: { Authorization: "[redacted]" },
 		};
 		request.mockRejectedValueOnce(err);
 
@@ -101,9 +98,6 @@ describe("createCheck()", () => {
 			expect.stringContaining("github_request_id=ABC123"),
 		);
 		expect(core.debug).toHaveBeenCalledWith(expect.stringContaining("[check-run-request]"));
-		expect(core.debug).toHaveBeenCalledWith(
-			expect.stringContaining('"Authorization":"Bearer [redacted]"'),
-		);
 	});
 });
 
@@ -146,9 +140,8 @@ describe("getCurrentRunCheckSuiteInfo()", () => {
 
 		expect(result).toEqual({ checkSuiteId: 456, checkRunHeadSha: "abc123" });
 		expect(request).toHaveBeenCalledTimes(1);
-		const apiBaseUrl = process.env.GITHUB_API_URL || "https://api.github.com";
 		expect(request.mock.calls[0][0]).toBe(
-			`${apiBaseUrl}/repos/${context.repository.repoName}/check-runs/111`,
+			`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs/111`,
 		);
 		expect(core.info).toHaveBeenCalledWith(expect.stringContaining("[check-suite-debug]"));
 	});

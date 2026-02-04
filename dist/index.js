@@ -6676,26 +6676,13 @@ async function createCheck(
 	if (checkSuiteId !== null) {
 		body.check_suite_id = checkSuiteId;
 	}
-	const apiBaseUrl = getApiBaseUrl();
-	const requestUrl = `${apiBaseUrl}/repos/${context.repository.repoName}/check-runs`;
-	const requestHeaders = getApiHeaders(context);
-	core.debug(
-		`[check-run-env] ${JSON.stringify({
-			linterName,
-			apiBaseUrl,
-			repo: context.repository.repoName,
-			hasToken: Boolean(context.token),
-			tokenLength: context.token ? context.token.length : 0,
-			headerKeys: Object.keys(requestHeaders),
-		})}`,
-	);
+	const requestUrl = `${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs`;
 	core.debug(
 		`[check-run-request] ${JSON.stringify({
 			linterName,
 			request: {
 				url: requestUrl,
 				method: "POST",
-				headers: sanitizeHeaders(requestHeaders),
 				body: {
 					name: body.name,
 					head_sha: body.head_sha,
@@ -6712,7 +6699,7 @@ async function createCheck(
 		);
 		const response = await request(requestUrl, {
 			method: "POST",
-			headers: requestHeaders,
+			headers: getApiHeaders(context),
 			body,
 		});
 		const responseHeaders = response && response.res && response.res.headers;
@@ -6760,26 +6747,9 @@ async function createCheck(
 			errorMessage += `; github_request_id=${requestId}`;
 		}
 		if (err.requestInfo || err.responseHeaders || err.statusCode) {
-			const requestInfo = err.requestInfo
-				? {
-						...err.requestInfo,
-						headers: sanitizeHeaders(err.requestInfo.headers),
-					}
-				: {
-						url: requestUrl,
-						method: "POST",
-						headers: sanitizeHeaders(requestHeaders),
-						body: {
-							name: body.name,
-							head_sha: body.head_sha,
-							conclusion: body.conclusion,
-							annotations: annotations.length,
-							title: body.output.title,
-						},
-					};
 			core.debug(
 				`[check-run-request] ${JSON.stringify({
-					request: requestInfo,
+					request: err.requestInfo || null,
 					response:
 						err.statusCode || err.responseHeaders
 							? {
@@ -6845,41 +6815,13 @@ function getApiHeaders(context) {
 }
 
 /**
- * Resolves the GitHub API base URL, defaulting to api.github.com when unset.
- * @returns {string} - Base API URL
- */
-function getApiBaseUrl() {
-	const envUrl = typeof process.env.GITHUB_API_URL === "string" ? process.env.GITHUB_API_URL : "";
-	return envUrl && envUrl.trim() ? envUrl : "https://api.github.com";
-}
-
-/**
- * Sanitizes headers for debug logging, redacting Authorization values.
- * @param {object} headers - Request headers
- * @returns {object} - Sanitized headers
- */
-function sanitizeHeaders(headers) {
-	if (!headers || typeof headers !== "object") {
-		return headers;
-	}
-	const sanitized = { ...headers };
-	if (sanitized.Authorization) {
-		sanitized.Authorization = "Bearer [redacted]";
-	}
-	if (sanitized.authorization) {
-		sanitized.authorization = "Bearer [redacted]";
-	}
-	return sanitized;
-}
-
-/**
  * Performs an authenticated GET request to a repository-scoped GitHub API path.
  * @param {GithubContext} context - Information about the GitHub repository and action trigger event
  * @param {string} path - Relative API path
  * @returns {Promise<object>} - API response body
  */
 async function getApi(context, path) {
-	return request(`${getApiBaseUrl()}/repos/${context.repository.repoName}/${path}`, {
+	return request(`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/${path}`, {
 		method: "GET",
 		headers: getApiHeaders(context),
 	});
@@ -11242,7 +11184,7 @@ exports.quoteAll = quoteAll;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"lint-action","version":"2.3.12","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
+module.exports = JSON.parse('{"name":"lint-action","version":"2.3.11","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
 
 /***/ })
 

@@ -74,43 +74,15 @@ async function createCheck(
 	if (checkSuiteId !== null) {
 		body.check_suite_id = checkSuiteId;
 	}
-	const requestUrl = `${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs`;
-	core.debug(
-		`[check-run-request] ${JSON.stringify({
-			linterName,
-			request: {
-				url: requestUrl,
-				method: "POST",
-				body: {
-					name: body.name,
-					head_sha: body.head_sha,
-					conclusion: body.conclusion,
-					annotations: annotations.length,
-					title: body.output.title,
-				},
-			},
-		})}`,
-	);
 	try {
 		core.info(
 			`Creating GitHub check with ${conclusion} conclusion and ${annotations.length} annotations for ${linterName}…`,
 		);
-		const response = await request(requestUrl, {
+		await request(`${process.env.GITHUB_API_URL}/repos/${context.repository.repoName}/check-runs`, {
 			method: "POST",
 			headers: getApiHeaders(context),
 			body,
 		});
-		const responseHeaders = response && response.res && response.res.headers;
-		const requestId =
-			responseHeaders &&
-			(responseHeaders["x-github-request-id"] || responseHeaders["X-GitHub-Request-Id"]);
-		core.debug(
-			`[check-run-response] ${JSON.stringify({
-				linterName,
-				statusCode: response && response.res ? response.res.statusCode : null,
-				requestId: requestId || null,
-			})}`,
-		);
 		core.info(`${linterName} check created successfully`);
 	} catch (err) {
 		let errorMessage = err.message;

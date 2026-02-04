@@ -12,7 +12,7 @@ Use this skill when the user asks to release or â€œcommit, bump, and push tagsâ€
 ## Workflow
 
 1) **Preflight**
-   - Run `git status --short --branch` and proceed even if there are changes; include all local changes in the release by default without asking.
+   - Run `git status --short --branch` and confirm the repo is clean or that all changes should be included.
    - Read current version from `package.json` (Node): `node -p "require('./package.json').version"`.
    - Determine the major tag name to move (e.g., `v2` for `2.x.x`).
 
@@ -42,6 +42,5 @@ Use this skill when the user asks to release or â€œcommit, bump, and push tagsâ€
 
 ## Notes
 
-- Always include all local changes; do not ask about unrelated changes.
+- If there are unrelated local changes, ask before including them.
 - Always report the final commit SHA and the tags pushed.
-- Do not ask any question unless it's really necessary. Always perform the default behavior unless instructed.

@@ -162,6 +162,13 @@ async function createCheck(
 				? {
 						...err.requestInfo,
 						headers: sanitizeHeaders(err.requestInfo.headers),
+						body: {
+							name: body.name,
+							head_sha: body.head_sha,
+							conclusion: body.conclusion,
+							annotations: annotations.length,
+							title: body.output.title,
+						},
 					}
 				: {
 						url: requestUrl,

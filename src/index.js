@@ -61,7 +61,7 @@ async function runAction() {
 	let headSha = git.getHeadSha();
 
 	let hasFailures = false;
-	let checkCreateFailed = false;
+	const checks = [];
 
 	// Loop over all available linters
 	for (const [linterId, linter] of Object.entries(linters)) {
@@ -120,7 +120,6 @@ async function runAction() {
 				if (git.hasChanges()) {
 					git.commitChanges(commitMessage.replace(/\${linter}/g, linter.name), skipVerification);
 					git.pushChanges(skipVerification);
-					headSha = git.getHeadSha();
 				}
 			}
 
@@ -129,26 +128,41 @@ async function runAction() {
 				.replace(/\${dir}/g, lintDirRel !== "." ? `${lintDirRel}` : "")
 				.trim();
 
-			try {
-				await createCheck(
+			checks.push({ lintCheckName, lintResult, summary });
+
+			core.endGroup();
+		}
+	}
+
+	// Add commit annotations after running all linters. To be displayed on pull requests, the
+	// annotations must be added to the last commit on the branch. This can either be a user commit or
+	// one of the auto-fix commits
+	if (isPullRequest && autoFix) {
+		headSha = git.getHeadSha();
+	}
+
+	core.startGroup("Create check runs with commit annotations");
+	let groupClosed = false;
+	try {
+		await Promise.all(
+			checks.map(({ lintCheckName, lintResult, summary }) =>
+				createCheck(
 					lintCheckName,
 					headSha,
 					context,
 					lintResult,
 					neutralCheckOnWarning,
 					summary,
-				);
-			} catch (err) {
-				checkCreateFailed = true;
-				core.warning("Some check runs could not be created.");
-			}
-
-			core.endGroup();
-		}
-	}
-
-	if (checkCreateFailed) {
+				),
+			),
+		);
+	} catch (err) {
+		core.endGroup();
+		groupClosed = true;
 		core.warning("Some check runs could not be created.");
+	}
+	if (!groupClosed) {
+		core.endGroup();
 	}
 
 	if (hasFailures && !continueOnError) {

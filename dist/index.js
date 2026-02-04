@@ -11077,7 +11077,7 @@ exports.quoteAll = quoteAll;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"lint-action","version":"2.3.9","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
+module.exports = JSON.parse('{"name":"lint-action","version":"2.3.8","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
 
 /***/ })
 
@@ -11185,7 +11185,7 @@ async function runAction() {
 	let headSha = git.getHeadSha();
 
 	let hasFailures = false;
-	let checkCreateFailed = false;
+	const checks = [];
 
 	// Loop over all available linters
 	for (const [linterId, linter] of Object.entries(linters)) {
@@ -11244,7 +11244,6 @@ async function runAction() {
 				if (git.hasChanges()) {
 					git.commitChanges(commitMessage.replace(/\${linter}/g, linter.name), skipVerification);
 					git.pushChanges(skipVerification);
-					headSha = git.getHeadSha();
 				}
 			}
 
@@ -11253,26 +11252,41 @@ async function runAction() {
 				.replace(/\${dir}/g, lintDirRel !== "." ? `${lintDirRel}` : "")
 				.trim();
 
-			try {
-				await createCheck(
+			checks.push({ lintCheckName, lintResult, summary });
+
+			core.endGroup();
+		}
+	}
+
+	// Add commit annotations after running all linters. To be displayed on pull requests, the
+	// annotations must be added to the last commit on the branch. This can either be a user commit or
+	// one of the auto-fix commits
+	if (isPullRequest && autoFix) {
+		headSha = git.getHeadSha();
+	}
+
+	core.startGroup("Create check runs with commit annotations");
+	let groupClosed = false;
+	try {
+		await Promise.all(
+			checks.map(({ lintCheckName, lintResult, summary }) =>
+				createCheck(
 					lintCheckName,
 					headSha,
 					context,
 					lintResult,
 					neutralCheckOnWarning,
 					summary,
-				);
-			} catch (err) {
-				checkCreateFailed = true;
-				core.warning("Some check runs could not be created.");
-			}
-
-			core.endGroup();
-		}
-	}
-
-	if (checkCreateFailed) {
+				),
+			),
+		);
+	} catch (err) {
+		core.endGroup();
+		groupClosed = true;
 		core.warning("Some check runs could not be created.");
+	}
+	if (!groupClosed) {
+		core.endGroup();
 	}
 
 	if (hasFailures && !continueOnError) {

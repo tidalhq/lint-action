@@ -68,30 +68,6 @@ describe("createCheck()", () => {
 			expect.any(Error),
 		);
 	});
-
-	test("logs request metadata and request id on socket errors", async () => {
-		const err = new Error("socket hang up");
-		err.code = "ECONNRESET";
-		err.responseHeaders = { "x-github-request-id": "ABC123" };
-		err.requestInfo = {
-			url: "https://api.github.com/repos/org/repo/check-runs",
-			method: "POST",
-			headers: { Authorization: "[redacted]" },
-		};
-		request.mockRejectedValueOnce(err);
-
-		await expect(
-			createCheck("check-name", "sha", context, LINT_RESULT, false, "summary"),
-		).rejects.toEqual(expect.any(Error));
-
-		expect(core.error).toHaveBeenCalledWith(
-			expect.stringContaining("code: ECONNRESET"),
-		);
-		expect(core.error).toHaveBeenCalledWith(
-			expect.stringContaining("github_request_id=ABC123"),
-		);
-		expect(core.debug).toHaveBeenCalledWith(expect.stringContaining("[check-run-request]"));
-	});
 });
 
 describe("getCurrentRunCheckSuiteInfo()", () => {

@@ -6688,13 +6688,6 @@ async function createCheck(
 		core.info(`${linterName} check created successfully`);
 	} catch (err) {
 		let errorMessage = err.message;
-		const details = [];
-		if (err.code) {
-			details.push(`code: ${err.code}`);
-		}
-		if (typeof err.statusCode === "number") {
-			details.push(`status: ${err.statusCode}`);
-		}
 		if (err.data) {
 			try {
 				const errorData = JSON.parse(err.data);
@@ -6707,30 +6700,6 @@ async function createCheck(
 			} catch (e) {
 				// Ignore
 			}
-		}
-		if (details.length > 0) {
-			errorMessage += ` (${details.join(", ")})`;
-		}
-		const requestId =
-			err.responseHeaders &&
-			(err.responseHeaders["x-github-request-id"] ||
-				err.responseHeaders["X-GitHub-Request-Id"]);
-		if (requestId) {
-			errorMessage += `; github_request_id=${requestId}`;
-		}
-		if (err.requestInfo || err.responseHeaders || err.statusCode) {
-			core.debug(
-				`[check-run-request] ${JSON.stringify({
-					request: err.requestInfo || null,
-					response:
-						err.statusCode || err.responseHeaders
-							? {
-									statusCode: typeof err.statusCode === "number" ? err.statusCode : null,
-									headers: err.responseHeaders || null,
-								}
-							: null,
-				})}`,
-			);
 		}
 		core.error(errorMessage);
 
@@ -9567,50 +9536,6 @@ module.exports = { useYarn };
 
 const https = __nccwpck_require__(5687);
 
-const SENSITIVE_HEADER_KEYS = ["authorization", "token", "cookie", "set-cookie"];
-
-/**
- * Returns headers with sensitive values redacted.
- * @param {object | undefined} headers - Request/response headers
- * @returns {object | undefined} - Sanitized headers
- */
-function sanitizeHeaders(headers) {
-	if (!headers || typeof headers !== "object") {
-		return headers;
-	}
-	const sanitized = {};
-	for (const [key, value] of Object.entries(headers)) {
-		const lowerKey = key.toLowerCase();
-		const isSensitive = SENSITIVE_HEADER_KEYS.some((sensitiveKey) =>
-			lowerKey.includes(sensitiveKey),
-		);
-		sanitized[key] = isSensitive ? "[redacted]" : value;
-	}
-	return sanitized;
-}
-
-/**
- * Attaches safe request/response context to an error.
- * @param {Error} err - Error object
- * @param {string | URL} url - Request URL
- * @param {object} options - Request options
- * @param {object | undefined} res - HTTP response
- * @returns {Error} - Error with attached context
- */
-function attachRequestContext(err, url, options, res) {
-	const requestUrl = url && typeof url.toString === "function" ? url.toString() : String(url);
-	err.requestInfo = {
-		url: requestUrl,
-		method: (options && options.method) || "GET",
-		headers: sanitizeHeaders(options && options.headers),
-	};
-	if (res) {
-		err.statusCode = res.statusCode;
-		err.responseHeaders = sanitizeHeaders(res.headers);
-	}
-	return err;
-}
-
 /**
  * Helper function for making HTTP requests
  * @param {string | URL} url - Request URL
@@ -9630,17 +9555,13 @@ function request(url, options) {
 						const err = new Error(`Received status code ${res.statusCode}`);
 						err.response = res;
 						err.data = data;
-						attachRequestContext(err, url, options, res);
 						reject(err);
 					} else {
 						resolve({ res, data: JSON.parse(data) });
 					}
 				});
 			})
-			.on("error", (err) => {
-				attachRequestContext(err, url, options);
-				reject(err);
-			});
+			.on("error", reject);
 		if (options.body) {
 			req.end(JSON.stringify(options.body));
 		} else {
@@ -11156,7 +11077,7 @@ exports.quoteAll = quoteAll;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"lint-action","version":"2.3.10","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
+module.exports = JSON.parse('{"name":"lint-action","version":"2.3.9","description":"GitHub Action for detecting and fixing linting errors","repository":"github:wearerequired/lint-action","license":"MIT","private":true,"main":"./dist/index.js","scripts":{"test":"jest","lint":"eslint --max-warnings 0 \\"**/*.js\\"","lint:fix":"yarn lint --fix","format":"prettier --list-different \\"**/*.{css,html,js,json,jsx,less,md,scss,ts,tsx,vue,yaml,yml}\\"","format:fix":"yarn format --write","build":"ncc build ./src/index.js"},"dependencies":{"@actions/core":"^1.10.0","command-exists":"^1.2.9","glob":"^8.1.0","parse-diff":"^0.11.0","shescape":"^1.7.4"},"peerDependencies":{},"devDependencies":{"@samuelmeuli/eslint-config":"^6.0.0","@samuelmeuli/prettier-config":"^2.0.1","@vercel/ncc":"^0.36.0","eslint":"8.32.0","eslint-config-airbnb-base":"15.0.0","eslint-config-prettier":"^8.6.0","eslint-plugin-import":"^2.26.0","eslint-plugin-jsdoc":"^46.8.2","fs-extra":"^11.1.0","jest":"^29.3.1","prettier":"^2.8.3"},"eslintConfig":{"root":true,"extends":["@samuelmeuli/eslint-config","plugin:jsdoc/recommended"],"env":{"node":true,"jest":true},"settings":{"jsdoc":{"mode":"typescript"}},"rules":{"no-await-in-loop":"off","no-unused-vars":["error",{"args":"none","varsIgnorePattern":"^_"}],"jsdoc/check-indentation":"error","jsdoc/check-syntax":"error","jsdoc/newline-after-description":["error","never"],"jsdoc/require-description":"error","jsdoc/require-hyphen-before-param-description":"error","jsdoc/require-jsdoc":"off"}},"eslintIgnore":["node_modules/","test/linters/projects/","test/tmp/","dist/"],"jest":{"setupFiles":["./test/mock-actions-core.js"]},"prettier":"@samuelmeuli/prettier-config"}');
 
 /***/ })
 
